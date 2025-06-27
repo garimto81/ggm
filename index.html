@@ -258,11 +258,11 @@
         filteredData.forEach(issue => {
             const style = categoryStyles[issue.category];
             const card = document.createElement('div');
-            card.className = 'card rounded-xl overflow-hidden';
+            card.className = 'card rounded-xl overflow-hidden flex flex-col h-full';
             card.setAttribute('data-issue-no', issue.no);
             
             card.innerHTML = `
-                <div class="p-6">
+                <div class="p-6 flex-grow">
                     <div class="flex items-center justify-between mb-4">
                         <span class="tag ${style.tag}">${issue.category}</span>
                         <span class="text-xs font-mono text-gray-500">No. ${issue.no}</span>
@@ -270,6 +270,17 @@
                     <h3 class="text-xl font-bold text-gray-100 flex items-start mb-1">${style.icon} <span class="flex-1">${issue.cause}</span></h3>
                     <div class="flex items-center text-sm text-gray-400 mb-4">
                         <span>발생: ${issue.date}</span><span class="mx-2">|</span><span>소요: ${issue.duration}</span>
+                    </div>
+                </div>
+                <div class="border-t border-gray-700/60 mx-6"></div>
+                <div class="p-6 pt-4 space-y-3 text-sm">
+                    <div>
+                        <h4 class="font-semibold text-gray-400 text-xs mb-1 uppercase">문제 상황 요약</h4>
+                        <p class="text-gray-300 truncate" title="${issue.background}">${issue.background}</p>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-sky-400 text-xs mb-1 uppercase">해결 조치 요약</h4>
+                        <p class="text-gray-300 truncate" title="${issue.solution}">${issue.solution}</p>
                     </div>
                 </div>`;
             issuesGrid.appendChild(card);
