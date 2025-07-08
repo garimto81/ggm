@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>(Ver 0.03)MPP 프로젝트 이슈 분석 대시보드</title>
+    <!-- 버전을 0.04으로 통일 -->
+    <title>(Ver 0.04) MPP 프로젝트 이슈 분석 대시보드</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
@@ -20,6 +21,12 @@
         }
         .card:hover {
             transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(14, 165, 233, 0.1);
+        }
+        /* 접근성 개선: 키보드 포커스 시 시각적 피드백 제공 */
+        .card:focus-visible {
+            outline: 2px solid #0EA5E9; /* Sky Blue outline */
+            outline-offset: 2px;
             box-shadow: 0 10px 20px rgba(14, 165, 233, 0.1);
         }
         .tag {
@@ -61,9 +68,10 @@
             background-color: #374151; /* Default issue day color */
             cursor: pointer;
         }
-        button.calendar-day:hover {
+        button.calendar-day:hover, button.calendar-day:focus-visible {
             transform: scale(1.1);
             z-index: 10;
+            outline: none;
         }
         button.calendar-day.selected {
             background-color: #0EA5E9 !important;
@@ -116,7 +124,9 @@
             border-style: solid;
             border-color: #374151 transparent transparent transparent;
         }
-        .calendar-day-container:hover .calendar-tooltip {
+        /* 접근성 개선: 키보드 포커스 시에도 툴팁 표시 */
+        .calendar-day-container:hover .calendar-tooltip,
+        .calendar-day-container:focus-within .calendar-tooltip {
             visibility: visible;
             opacity: 1;
         }
@@ -151,9 +161,9 @@
     <div class="container mx-auto p-4 md:p-8">
         <!-- Header -->
         <header class="text-center mb-12">
-            <p class="text-sm text-sky-400 mb-2 font-mono">Ver 0.02</p>
+            <p id="header-version" class="text-sm text-sky-400 mb-2 font-mono"></p>
             <h1 class="text-4xl md:text-5xl font-bold mb-2 bg-gradient-to-r from-sky-400 to-cyan-300 text-transparent bg-clip-text">MPP 프로젝트 최종 이슈 분석</h1>
-            <p class="text-lg text-gray-400">2025.04.29 - 2025.05.11 발생 이슈 트래커</p>
+            <p id="header-date-range" class="text-lg text-gray-400"></p>
         </header>
 
         <!-- Calendar Section -->
@@ -191,13 +201,21 @@
 
 <script>
 (function() { // IIFE
-    // --- 상수 정의 (매직 스트링 제거) ---
+    // --- 설정 및 상수 (유지보수성 개선) ---
+    const CONFIG = {
+        VERSION: '0.03',
+        PROJECT_YEAR: 2025,
+        // 월은 0부터 시작 (0 = 1월)
+        MONTHS_TO_DISPLAY: [3, 4], // 4월, 5월
+        DATE_RANGE_TEXT: '2025.04.29 - 2025.05.11 발생 이슈 트래커',
+        ISSUES_JSON_PATH: './issues.json' // 데이터 파일 경로
+    };
+
     const FILTER_TYPE = {
         CATEGORY: 'category',
         DATE: 'date'
     };
     const ALL_FILTER = 'all';
-    const ISSUES_JSON_PATH = './issues.json'; // 데이터 파일 경로
 
     // --- DOM 요소 ---
     const issuesGrid = document.getElementById('issues-grid');
@@ -211,7 +229,7 @@
     let lastFocusedElement;
     let allIssuesData = []; // 모든 이슈 데이터를 저장할 배열
 
-    // --- 설정 및 템플릿 ---
+    // --- 카테고리 스타일 및 아이콘 ---
     const categoryStyles = {
         '기술 및 장비': { tag: 'tag-tech', icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mr-2 text-blue-400" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>` },
         '물류 및 현장 세팅': { tag: 'tag-logistics', icon: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mr-2 text-orange-400" aria-hidden="true"><path d="M14 16.5V13a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v3.5"/><path d="M20 12V6H4v6"/><path d="M2 12h20"/><path d="M20 16.5a3.5 3.5 0 0 1-7 0"/><path d="M4 16.5a3.5 3.5 0 0 0 7 0"/></svg>` },
@@ -232,17 +250,20 @@
         issues.forEach(issue => {
             const style = categoryStyles[issue.category];
             const card = document.createElement('div');
+            // 접근성 개선: 키보드 상호작용을 위해 role과 tabindex 추가
+            card.setAttribute('role', 'button');
+            card.setAttribute('tabindex', '0');
+            card.setAttribute('aria-label', `${issue.cause} 상세 보기`);
             card.className = 'card rounded-xl overflow-hidden flex flex-col h-full';
             // 필터링을 위한 데이터 속성 추가
             card.setAttribute('data-issue-no', issue.no);
             card.setAttribute('data-category', issue.category);
             card.setAttribute('data-date', issue.isoDate);
             
-            // 사전 해결 방안이 있을 경우 표시할 HTML 생성
             const preSolutionHTML = issue.preSolution
                 ? `<div>
-                        <h4 class="font-semibold text-amber-400 text-xs mb-1 uppercase">사전 해결 방안</h4>
-                        <p class="text-gray-300 truncate" title="${issue.preSolution.title}">${issue.preSolution.title}</p>
+                       <h4 class="font-semibold text-amber-400 text-xs mb-1 uppercase">사전 해결 방안</h4>
+                       <p class="text-gray-300 truncate" title="${issue.preSolution.title}">${issue.preSolution.title}</p>
                    </div>`
                 : '';
 
@@ -276,6 +297,7 @@
     /** 필터 상태에 따라 카드 가시성을 업데이트하는 함수 */
     const updateCardVisibility = () => {
         const cards = issuesGrid.querySelectorAll('.card');
+        let visibleCount = 0;
         cards.forEach(card => {
             const cardCategory = card.dataset.category;
             const cardDate = card.dataset.date;
@@ -287,9 +309,20 @@
                 shouldShow = currentFilter.value === cardDate;
             }
 
-            // 'display: flex'는 .card의 기본 display 속성
             card.style.display = shouldShow ? 'flex' : 'none';
+            if (shouldShow) visibleCount++;
         });
+
+        // 결과가 없을 때 메시지 표시
+        if (visibleCount === 0 && issuesGrid.querySelector('.no-results') === null) {
+             const noResultsMsg = document.createElement('p');
+             noResultsMsg.className = 'no-results col-span-full text-center text-gray-400';
+             noResultsMsg.textContent = '선택한 조건에 맞는 이슈가 없습니다.';
+             issuesGrid.appendChild(noResultsMsg);
+        } else if (visibleCount > 0) {
+            const noResultsMsg = issuesGrid.querySelector('.no-results');
+            if (noResultsMsg) noResultsMsg.remove();
+        }
     };
 
     const renderCalendar = (year, month, issuesByDate) => { // month is 0-indexed
@@ -326,8 +359,8 @@
             html += `<div class="calendar-day-container">`;
             if (issuesOnDay) {
                 html += `<button class="calendar-day" data-date="${dateStr}" aria-label="${day}일, 이슈 ${issuesOnDay.length}개">
-                            <span>${day}</span>
-                            <span class="issue-badge">${issuesOnDay.length}</span>
+                             <span>${day}</span>
+                             <span class="issue-badge">${issuesOnDay.length}</span>
                          </button>
                          ${tooltipHTML}`;
             } else {
@@ -351,12 +384,9 @@
             const filter = btn.dataset.filter;
             if(filter === ALL_FILTER) {
                 btn.textContent = `전체 (${issues.length})`;
-            } else if (counts[filter]) {
-                const baseText = btn.textContent.split('(')[0].trim();
-                btn.textContent = `${baseText} (${counts[filter]})`;
             } else {
-                 const baseText = btn.textContent.split('(')[0].trim();
-                 btn.textContent = `${baseText} (0)`;
+                const baseText = btn.textContent.split('(')[0].trim();
+                btn.textContent = `${baseText} (${counts[filter] || 0})`;
             }
         });
     };
@@ -369,7 +399,9 @@
         
         // Update Filter Button Selection
         document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.classList.toggle('active', currentFilter.type === FILTER_TYPE.CATEGORY && btn.dataset.filter === currentFilter.value);
+            // 날짜 필터가 활성화된 경우, 모든 카테고리 필터는 비활성화
+            const isCategoryFilterActive = currentFilter.type === FILTER_TYPE.CATEGORY && btn.dataset.filter === currentFilter.value;
+            btn.classList.toggle('active', isCategoryFilterActive);
         });
         
         updateCardVisibility();
@@ -386,7 +418,6 @@
         lastFocusedElement = document.activeElement;
         const style = categoryStyles[issue.category];
         
-        // 사전 해결 방안이 있을 경우 모달에 표시할 HTML 생성
         const preSolutionModalHTML = issue.preSolution
             ? `<div>
                    <h4 class="font-semibold text-amber-400 mb-2">사전 해결 방안</h4>
@@ -475,12 +506,26 @@
         }
     };
 
+    // 이벤트 위임: 카드 클릭
     issuesGrid.addEventListener('click', (e) => {
         const card = e.target.closest('.card');
         if (card) {
             const issueNo = parseInt(card.dataset.issueNo);
             const issue = allIssuesData.find(i => i.no === issueNo);
             if (issue) openModal(issue);
+        }
+    });
+
+    // 이벤트 위임: 카드 키보드 선택 (접근성 개선)
+    issuesGrid.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            const card = e.target.closest('.card');
+            if (card) {
+                e.preventDefault(); // 스페이스바 스크롤 방지
+                const issueNo = parseInt(card.dataset.issueNo);
+                const issue = allIssuesData.find(i => i.no === issueNo);
+                if (issue) openModal(issue);
+            }
         }
     });
 
@@ -507,8 +552,12 @@
     // --- 초기화 ---
     const initialize = async () => {
         try {
+            // 0. 헤더 정보 설정
+            document.getElementById('header-version').textContent = `Ver ${CONFIG.VERSION}`;
+            document.getElementById('header-date-range').textContent = CONFIG.DATE_RANGE_TEXT;
+
             // 1. Fetch data
-            const response = await fetch(ISSUES_JSON_PATH);
+            const response = await fetch(CONFIG.ISSUES_JSON_PATH);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -521,7 +570,7 @@
                 if (dateParts) {
                     const month = dateParts[1];
                     const day = dateParts[2];
-                    issue.isoDate = `2025-${month}-${day}`;
+                    issue.isoDate = `${CONFIG.PROJECT_YEAR}-${month}-${day}`;
                 }
             });
 
@@ -534,15 +583,18 @@
             }, {});
 
             // 3. Render initial UI
-            renderCalendar(2025, 3, issuesByDate); // April
-            renderCalendar(2025, 4, issuesByDate); // May
+            calendarWrapper.innerHTML = ''; // 기존 캘린더 초기화
+            CONFIG.MONTHS_TO_DISPLAY.forEach(month => {
+                renderCalendar(CONFIG.PROJECT_YEAR, month, issuesByDate);
+            });
+            
             updateFilterCounts(issuesData);
             renderAllIssueCards(issuesData);
             updateCardVisibility(); // Show all cards initially
 
         } catch (error) {
             console.error('대시보드 초기화 실패:', error);
-            issuesGrid.innerHTML = `<p class="col-span-full text-center text-red-400">이슈 데이터를 불러오는 데 실패했습니다. (${error.message})</p>`;
+            issuesGrid.innerHTML = `<p class="col-span-full text-center text-red-400">이슈 데이터를 불러오는 데 실패했습니다. (콘솔을 확인하세요)</p>`;
         }
     };
 
